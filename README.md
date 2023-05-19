@@ -1,8 +1,11 @@
-# EQDeets-Python
+# EQ Journey
  
 # TODO
-Class setup?
-Swap to active log
+Spells
+Spells recieved?
+
 
 # COMPLETE
 Detect Active Log
+Swap to active Log
+Class setup

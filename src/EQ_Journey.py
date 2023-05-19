@@ -1,58 +1,98 @@
-import json
-import time
-import re
 import csv
+import json
+import os
+import re
+import time
+import datetime as dt
 from pathlib import Path
-import prints as WARN
 
 import wmi
 
-import col
 import config as cfg
+import strings as STRI
 
 # Initializing Things
 c = wmi.WMI()
 csv_list = cfg.csv_list
 
+try:
+    os.mkdir('Characters')
+except FileExistsError:
+    pass
+try:
+    os.mkdir('Active_Character')
+except FileExistsError:
+    pass
+
 
 class Parser:
     def __init__(self):
         self.fast_Scan      = True
-        self.active_Log     = self.get_active_log(False)
+        self.active_Log     = get_active_log(False)
         self.name           = self.active_Log.split('/')[-1].split('_')[1]
-        self.save_path      = f"saves/{self.name}.json"
+        self.server         = self.get_server()
+
+        self.save_dir       = self.create_save_dir()
+        self.save_path      = f"{self.save_dir}/{self.name}-{self.server}.json"
+
         self.eq_Char        = self.load_character()
         self.new_Char       = self.eq_Char['Race'] == "Nightelf"
+
         self.file           = open(self.active_Log, 'r', encoding='utf-8')
         self.file_length    = self.file.seek(0, 2)
+
+        self.last_save      = time.time()
+        self.session        = False
+        self.per_tick       = 0
 
         self.file.seek(self.eq_Char['Line'], 0)
         if cfg.TEST:
             self.file.seek(0)
 
     # FUNCTIONS
-    def get_active_log(self, silent):
-        if cfg.TEST:
-            log = cfg.TEST_LOG
-        else:
-            x, log = max((f.stat().st_mtime, str(f)) for f in Path(cfg.LOG_LOCATION).iterdir())
-            while 'dbg.txt' in log:
-                if not silent:
-                    print(WARN.DBG_LOG)
-                    silent = True
-                x, log = max((f.stat().st_mtime, str(f)) for f in Path(cfg.LOG_LOCATION).iterdir())
-                time.sleep(2.5)
-            return log
+    def get_server(self):
+        match self.active_Log.split('/')[-1].split('_')[2]:
+            case 'P1999Green.txt':
+                return "Green"
+            case 'project1999.txt':
+                return "Blue"
+            case 'P1999PVP.txt':
+                return "Red"
+            case _:
+                return "Unknown"
+
+    def create_save_dir(self):
+        save_dir = f"Characters/{self.server}-{self.name}"
+        try:
+            os.mkdir(save_dir)
+        except FileExistsError:
+            pass
+        with open(f'{save_dir}/{self.name}_Zones.txt', 'a+', encoding='utf-8') as f:
+            if f.tell() == 0:
+                f.write('Zone Journal\n')
+        return save_dir
 
     def load_character(self):
         try:
             with open(self.save_path) as json_file:
-                eq_Char = json.load(json_file)
+                self.eq_Char = json.load(json_file)
         except Exception:
-            with open('src/data/template.json') as json_file:
-                eq_Char = json.load(json_file)
-                eq_Char['Name'] = self.name
-        return eq_Char
+            with open('Characters/template/template.json') as json_file:
+                self.eq_Char = json.load(json_file)
+                self.eq_Char['Name']     = self.name
+                self.eq_Char['Server']   = self.server
+        return self.eq_Char
+
+    def convert_coins(self, coins, in_or_out):
+        for coin in coins:
+            denom = f"{coin[1][0].upper()}P"
+            self.eq_Char['Coin'][in_or_out][denom] += int(coin[0])
+        self.eq_Char['Coin'][in_or_out]['SP'] += self.eq_Char['Coin'][in_or_out]['CP'] // 10
+        self.eq_Char['Coin'][in_or_out]['CP']  = self.eq_Char['Coin'][in_or_out]['CP'] % 10
+        self.eq_Char['Coin'][in_or_out]['GP'] += self.eq_Char['Coin'][in_or_out]['SP'] // 10
+        self.eq_Char['Coin'][in_or_out]['SP']  = self.eq_Char['Coin'][in_or_out]['SP'] % 10
+        self.eq_Char['Coin'][in_or_out]['PP'] += self.eq_Char['Coin'][in_or_out]['GP'] // 10
+        self.eq_Char['Coin'][in_or_out]['GP']  = self.eq_Char['Coin'][in_or_out]['GP'] % 10
 
     def save_it(self):
         if self.file.tell() == self.eq_Char['Line']:
@@ -60,150 +100,321 @@ class Parser:
         with open(self.save_path, 'w') as save:
             self.eq_Char['Line'] = self.file.tell()
             save.write(json.dumps(self.eq_Char, indent=4))
-            col.green('Saved.')
-        self.update_csv()
+            if not self.fast_Scan:
+                print(f"{'Saved.' :-^41}")
+        self.update_csvs()
+        self.last_save = time.time()
 
-    def update_csv(self):
+    def update_csvs(self):
         if cfg.CSV and not self.fast_Scan:
-            with open('Active Character.csv', 'w', newline='') as csvfile:
+            self.update_info_csv()
+            csvs_to_export = ["Stats", "Loot", "Kills", "Skills"]
+            if self.eq_Char['Stats']['Spell Casts'] > 0:
+                csvs_to_export.append("Spells")
+            for category in csvs_to_export:
+                self.update_sub_csvs(category)
+
+    def update_info_csv(self):
+        for file_name in ['Active_Character/Info.csv', f'{self.save_dir}/Info.csv']:
+            with open(file_name, 'w', newline='') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=csv_list, extrasaction='ignore')
                 writer.writeheader()
                 writer.writerow(self.eq_Char)
-            self.update_stats_csv()
-            self.update_loot_csv()
-            self.update_kills_csv()
 
-    def update_stats_csv(self):
-        with open(f'saves/{self.eq_Char["Name"]}_Stats.csv', 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=self.eq_Char["Stats"].keys(), extrasaction='ignore')
-            writer.writeheader()
-            writer.writerow(self.eq_Char['Stats'])
+    def update_sub_csvs(self, category):
+        for file_name in [f'Active_Character/{category}', f'{self.save_dir}/{category}']:
+            if category == "Stats":
+                top_x_list = list(self.eq_Char[category].keys())
+            elif category in ["Spells", "Skills"]:
+                top_x_list = sorted(self.eq_Char[category], key=self.eq_Char[category].get, reverse=True)
+            else:
+                top_x_list = sorted(self.eq_Char[category], key=self.eq_Char[category].get, reverse=True)[:cfg.TOP]
+            with open(f'{file_name}.csv', 'w', newline='') as csvfile:
+                csvwriter = csv.DictWriter(csvfile, fieldnames=top_x_list, extrasaction='ignore')
+                csvwriter.writeheader()
+                csvwriter.writerow(self.eq_Char[category])
+            if category not in ['Skills', 'Stats']:
+                with open(f'{file_name}-Names.csv', 'w', newline='') as csvfile:
+                    rowwriter = csv.writer(csvfile)
+                    rowwriter.writerow(range(1, cfg.TOP+1))
+                    rowwriter.writerow(top_x_list)
 
-    def update_loot_csv(self):
-        top_5_loot = sorted(self.eq_Char['Looted'], key=self.eq_Char['Looted'].get, reverse=True)[:5]
-        with open(f'saves/{self.eq_Char["Name"]}_Loot.csv', 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=top_5_loot, extrasaction='ignore')
-            writer.writeheader()
-            writer.writerow(self.eq_Char['Looted'])
+    def zone_journal(self, full_Line):
+        with open(f'{self.save_dir}/{self.name}_Zones.txt', 'a+') as j:
+            j.seek(0)
+            last_line = j.readlines()[-1]
+            if full_Line[27:] not in last_line[27:]:
+                j.write(f'{full_Line}\n')
 
-    def update_kills_csv(self):
-        top_5_kills = sorted(self.eq_Char['Killed'], key=self.eq_Char['Killed'].get, reverse=True)[:5]
-        with open(f'saves/{self.eq_Char["Name"]}_Kills.csv', 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=top_5_kills, extrasaction='ignore')
-            writer.writeheader()
-            writer.writerow(self.eq_Char['Killed'])
+    def eqj_command(self, line):
+        if self.fast_Scan:
+            return
+        try:
+            cmd = re.findall(r'^eqj-(start-|reset-|status-|end)(?:(\d+)) is not online at this time', line.lower())[0]
+        except Exception:
+            return
+        if 'start-' in cmd and not self.session:
+            self.cmd_session_start(cmd)
+        elif 'reset-' in cmd:
+            self.cmd_session_start(cmd)
+        elif 'status-' in cmd and self.session:
+            self.cmd_session_status(cmd)
+        elif 'end' in cmd and self.session:
+            self.session = False
+
+    def cmd_session_start(self, cmd):
+        print('New tracking session started!')
+        self.session        = True
+        self.start_time     = time.time()
+        self.start_ticks    = self.eq_Char['Stats']['Exp Ticks']
+        self.start_exp      = int(cmd[1])
+        self.start_lvl      = self.eq_Char['Level']
+        self.per_tick       = 0
+        self.exp            = self.start_exp
+        self.start_plat     = self.eq_Char['Coin']['Earned']['PP']
+
+    def cmd_session_status(self, cmd):
+        try:
+            self.exp        = float(cmd[1])
+            dur             = int((time.time() - self.start_time)/60)
+            gained          = round((self.exp - self.start_exp) + ((self.eq_Char['Level'] - self.start_lvl)*100), 2)
+            ticks           = self.eq_Char['Stats']['Exp Ticks'] - self.start_ticks
+            self.per_tick   = round(gained / ticks, 2)
+            exp_per_hour    = f'{round((gained/dur)*60, 1)}%'
+            time_to_ding    = round((((100-(self.exp) % 100)) / (gained/dur)), 1)
+            ding_at         = (dt.datetime.now() + dt.timedelta(minutes=time_to_ding))
+            pp_gained       = self.eq_Char['Coin']['Earned']['PP'] - self.start_plat
+            pp_per_hr       = round((pp_gained/dur)*60, 1)
+            pp_per_tic      = round(pp_gained/ticks, 1)
+
+            with open('Active_Character/SessionStats.txt', 'w') as sesh:
+                sesh.write(f"{'Session Stats' :-^41}\n")
+                sesh.write(f"{'Current: ' :>14}{self.exp:<5}|{'Kills: ' :>12}{ticks}\n")
+                sesh.write(f"{'Exp Earned: ':>14}{gained:<5}|{'PP Earned: ' :>12}{pp_gained}\n")
+                sesh.write(f"{'Exp/Kill: ':>14}{self.per_tick:<5}|{'PP/Kill: ':>12}{pp_per_tic}\n")
+                sesh.write(f"{'Exp/Hour: ':>14}{exp_per_hour:<5}|{'PP/Hour: ' :>12}{pp_per_hr}\n")
+                sesh.write(f"{'Duration: ':>14}{dur:<5}|{'Ding @: ':>12}{ding_at.strftime('%a %I:%M%p')}")
+            print(f'{"Session Text Updated." :-^20}')
+        except ZeroDivisionError:
+            print(f'{"Not enough data yet." :-^20}')
+        except Exception as e:
+            print(e)
+
+    def auto_status(self):
+        if self.per_tick == 0 or not self.session:
+            return
+        exp_guess = round(self.exp + self.per_tick, 2)
+        cmd = ['status', exp_guess]
+        self.cmd_session_status(cmd)
 
 
+######################################
 def process_status():
     return next((process for process in c.Win32_Process() if process.Name == cfg.PROCESS_NAME), False)
 
 
 def look_for_process():
     if cfg.TEST:
-        return True
+        return
     x = 0
     while not (game_process := process_status()) and cfg.MAX_WAIT_TICKS > x:
         if x == 0:
-            col.red(WARN.PROCESS_LOST)
+            print(STRI.PROCESS_LOST)
         else:
-            col.red(f'{cfg.PROCESS_NAME} missing for {x * cfg.WAIT_DURATION} seconds..')
+            print(f'{cfg.PROCESS_NAME} missing for {x * cfg.WAIT_DURATION} seconds..')
         x += 1
         time.sleep(cfg.WAIT_DURATION)
-    return game_process
+    if not game_process:
+        print(f'{cfg.PROCESS_NAME} not found, closing..')
+        time.sleep(2)
+        quit()
+
+
+def recent_modified_log():
+    x, log = max((f.stat().st_mtime, str(f)) for f in Path(cfg.LOG_LOCATION).iterdir())
+    return log
+
+
+def get_active_log(silent):
+    if cfg.TEST:
+        return cfg.TEST_LOG
+    x = 0
+    log = recent_modified_log()
+    while 'dbg.txt' in log or 'sky.txt' in log:
+        if not silent:
+            print(STRI.DBG_LOG)
+            silent = True
+        log = recent_modified_log()
+        if x % 15 == 0:
+            look_for_process()
+        x += 1
+        time.sleep(1)
+    return log
 
 
 def parse():
+    look_for_process()
     Par = Parser()
-    game_process = look_for_process()
+    print(f'Parsing {Par.eq_Char["Name"]} from {Par.active_Log}')
     last_activity = time.time()
+    Par.start_time = time.time()
     Par.save_it()
+    to_save = False
 
-    while game_process:
+    while True:
         full_Line = Par.file.readline().strip()
         now = time.time()
+
         # Parse it
         if full_Line:
-            to_save = True
             last_activity = time.time()
             line = full_Line[27:]
-            print(line)
+            if not Par.fast_Scan:
+                print(full_Line)
 
-            if 'You have become better at ' in line:
+            # General info
+            if 'You have entered ' in line and 'an Arena (PvP) area' not in line:
+                Par.eq_Char['Zone'] = line[17:-1]
+                Par.zone_journal(full_Line)
+                to_save = True
+
+            elif f"] {Par.eq_Char['Name']} (" in line and "[ANON" not in line:
+                who = re.findall(r'^(?:.+)?\[(\d+) (.+)\] \w+ \((\w+)\)(?: <(.+)>)?', line)[0]
+                if who[3] != Par.eq_Char["Guild"]:
+                    Par.eq_Char.update({"Guild": who[3]})
+                    to_save = True
+                if Par.new_Char:
+                    Par.eq_Char.update({'Level': int(who[0])})
+                    Par.eq_Char.update({'Class': who[1]})
+                    Par.eq_Char.update({'Race': who[2]})
+                    Par.new_Char = False
+
+            # Spells / Skills
+            elif 'You have become better at ' in line:
                 skill_Name = line[26:line.index("!")]
                 Par.eq_Char['Skills'].update({skill_Name: int(line[line.index("(")+1:-1])})
 
-            elif 'You have entered ' in line:
-                Par.eq_Char['Zone'] = line[17:-1]
+            elif 'You begin casting ' in line:
+                last_cast = line[18:-1]
+                Par.eq_Char['Stats']['Spell Casts'] += 1
+                try:
+                    Par.eq_Char['Spells'][last_cast] += 1
+                except KeyError:
+                    Par.eq_Char['Spells'][last_cast] = 1
+                to_save = True
 
-            elif f"] {Par.eq_Char['Name']} (" in line and "[ANON" not in line:
-                if "<" in line:
-                    if Par.eq_Char['Guild'] != line[line.index('<')+1:line.index('>')]:
-                        Par.eq_Char.update({"Guild": line[line.index('<')+1:line.index('>')]})
-                    else:
-                        to_save = False
-                if Par.new_Char:
-                    Par.eq_Char.update({'Level': int(line.strip("AFK")[1:line.index(' ')])})
-                    Par.eq_Char.update({'Class': line[line.index(' ')+1:line.index(']')]})
-                    Par.eq_Char.update({'Race': line[line.index('(')+1:line.index(')')]})
-                    Par.new_Char = False
+            elif 'Your spell fizzles!' in line:
+                Par.eq_Char['Stats']['Fizzles'] += 1
+                if last_cast != '':
+                    Par.eq_Char['Spells'][last_cast] -= 1
+                    last_cast = ''
+                to_save = True
+
+            elif 'Your spell is interrupted.' in line:
+                Par.eq_Char['Stats']['Interrupts'] += 1
+                if last_cast != '':
+                    Par.eq_Char['Spells'][last_cast] -= 1
+                    last_cast = ''
+                to_save = True
+
+            elif 'bandag' in line or 'You cannot bind wounds above ' in line:
+                if 'You begin to bandage ' in line:
+                    Par.eq_Char['Stats']['Bandages Used'] += 1
+                    to_save = True
+                elif line in STRI.BANDAGE_LOST:
+                    Par.eq_Char['Stats']['Bandages Wasted'] += 1
                     to_save = True
 
+            # Kills / Killed by
             elif 'You have slain ' in line:
                 Par.eq_Char['Stats']['Kills'] += 1
                 mob_name = line[15:line.index('!')]
                 try:
-                    Par.eq_Char['Killed'][mob_name] += 1
+                    Par.eq_Char['Kills'][mob_name] += 1
                 except KeyError:
-                    Par.eq_Char['Killed'][mob_name] = 1
+                    Par.eq_Char['Kills'][mob_name] = 1
 
-            elif 'You have been slain by ' in line:
+            elif 'You have been slain by ' in line or 'You have died' in line:
                 Par.eq_Char['Stats']['Deaths'] += 1
+                to_save = True
 
-            elif 'You gain experience!!' in line or 'You gain party experience!!' in line:
+            # Levels / EXP
+            elif 'You gain experience!!' in line:
                 Par.eq_Char['Stats']["Exp Ticks"] += 1
+                Par.eq_Char['Stats']["Solo Exp Ticks"] += 1
+                to_save = True
+                Par.auto_status()
+
+            elif 'You gain party experience!!' in line:
+                Par.eq_Char['Stats']["Exp Ticks"] += 1
+                Par.eq_Char['Stats']["Party Exp Ticks"] += 1
+                to_save = True
+                Par.auto_status()
 
             elif 'You have gained a level! Welcome to level ' in line:
                 Par.eq_Char['Level'] = int(line[42:-1])
+                to_save = True
 
+            # Loot / Coin
             elif '--You have looted a ' in line:
-                item_name = line[20:line.index('.--')]
+                item_name = line[20:-3]
+                Par.eq_Char["Stats"]["Items Looted"] += 1
                 try:
-                    Par.eq_Char['Looted'][item_name] += 1
+                    Par.eq_Char['Loot'][item_name] += 1
                 except KeyError:
-                    Par.eq_Char['Looted'][item_name] = 1
-            elif 'from the corpse' in line:
-                print('you got cash!')
-                to_save = False
-            elif 'as your split' in line:
-                print('you got cash!')
-                to_save = False
-            else:
-                to_save = False
-            if to_save:
-                Par.save_it()
+                    Par.eq_Char['Loot'][item_name] = 1
+                to_save = True
 
-            if Par.fast_Scan and Par.file_length == Par.file.tell():
+            elif re.match('^You receive (.+) (from|as|pieces)(.+)', line):
+                Par.convert_coins(re.findall(r'(\d+) (\w+)', line), "Earned")
+                to_save = True
+
+            elif re.match('^You give (.+) to (.+).', line):
+                Par.convert_coins(re.findall(r'(\d+) (\w+)', line), "Spent")
+                to_save = True
+
+            # Hits
+            elif re.match(f'^{Par.name} (lands|Scores) a (critical hit|Crippling Blow)!', line):
+                typ, hit = re.findall(r'(critical hit|Crippling Blow|\d+)', line)
+                Par.eq_Char['Stats'][typ.title()] = max(Par.eq_Char['Stats'][typ.title()], int(hit))
+
+            elif re.match(r'eqj-(.+) is not online at this time.', line.lower()):
+                Par.eqj_command(line)
+
+            # Disable fast_Scan once the log has caught up to the end.
+            # I would do >= if but there's something with the "---" line when you /who
+            # where it returns an astronomically high file position and will trigger this way too early
+            if Par.fast_Scan and (Par.file_length == Par.file.tell()):
                 Par.fast_Scan = False
-                Par.update_csv()
+                to_save = True
 
-        elif (now - last_activity) > cfg.TIME_BETWEEN_CHECKS:
-            game_process = look_for_process()
-            last_activity = time.time()
+        # Save when flagged and if it's been over 5 seconds since last save.
+        if to_save and (now - Par.last_save) > 15:
             Par.save_it()
+            to_save = False
 
+        # Throttle parse rate / Log and Process checks if no activity / disable fast_Scan just in case
         if (now - last_activity) > cfg.SLEEP_TIMER:
-            if Par.active_Log != Par.get_active_log(True):
-                print('New active log found.')
+            Par.fast_Scan = False
+
+            # Verify Active Log
+            if Par.active_Log != get_active_log(True):
+                print('New active log found..')
                 Par.file.close()
                 parse()
-            time.sleep(10)
+
+            # Verify eqgame.exe Process
+            if (now - last_activity) > cfg.TIME_BETWEEN_CHECKS:
+                look_for_process()
+                last_activity = time.time()
+
+            # Longer wait if "sleeping"
+            time.sleep(0.5)
+
+        # Shorter wait if parsing. No wait if fast_Scan.
         elif not Par.fast_Scan:
-            time.sleep(.1)
+            time.sleep(.01)
 
 
 # Do the Thing
-
 parse()
-
-col.red(f'{cfg.PROCESS_NAME} not found, closing..')
-time.sleep(2)

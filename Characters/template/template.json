@@ -1,0 +1,49 @@
+{
+    "Name": "Soandso",
+    "Race": "Nightelf",
+    "Class": "Mohawk",
+    "Level": 1,
+    "Guild": "",
+    "Zone": "PARSING, PLEASE WAIT..",
+    "Server": "",
+    "Stats": {
+        "Kills": 0,
+        "Deaths": 0,
+        "Exp Ticks": 0,
+        "Solo Exp Ticks": 0,
+        "Party Exp Ticks": 0,
+        "Items Looted": 0,
+        "Bandages Used": 0,
+        "Bandages Wasted": 0,
+        "Spell Casts": 0,
+        "Fizzles": 0,
+        "Interrupts": 0,
+        "Critical Hit": 0,
+        "Crippling Blow": 0
+    },
+    "Coin": {
+        "Earned":{
+            "PP": 0,
+            "GP": 0,
+            "SP": 0,
+            "CP": 0
+        },
+        "Spent":{
+            "PP": 0,
+            "GP": 0,
+            "SP": 0,
+            "CP": 0
+        }
+    },
+    "Spells": {
+    },
+    "Skills": {
+        "Offense": 0,
+        "Defense": 0
+    },
+    "Kills": {
+    },
+    "Loot": {
+    },
+    "Line": 0
+}
