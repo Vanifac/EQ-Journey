@@ -18,6 +18,13 @@ WAIT_DURATION       = 10
 MAX_WAIT_TIME       = 600
 MAX_WAIT_TICKS      = MAX_WAIT_TIME / WAIT_DURATION
 
+
+def update_eqdata():
+    config_object[CONFIG_EQ_KEY] = eqdata
+    with open(CONFIG_NAME, 'w') as conf:
+        config_object.write(conf)
+
+
 # Load saved info
 eqdata = None
 try:
@@ -26,26 +33,23 @@ try:
 except Exception:
     pass
 
+
 if eqdata is None:
     print('Select where P99 Everquest is Installed ie C:\\Everquest')
     root = Tk()
     root.withdraw()  # Hide small window
     root.attributes('-topmost', True)  # Opened windows will be active. above all windows despite of selection
     eqdata = {CONFIG_GAME_DIR_KEY: filedialog.askdirectory(title="Everquest Directory")}
-    eqdata['TAKP']              = False
     eqdata['CSV Output']        = True
     eqdata['TXT Output']        = False
     eqdata['Top List Length']   = 10
+    update_eqdata()
 
-    config_object[CONFIG_EQ_KEY] = eqdata
-    with open(CONFIG_NAME, 'w') as conf:
-        config_object.write(conf)
 
 EQ_LOCATION     = eqdata[CONFIG_GAME_DIR_KEY]
 LOG_LOCATION    = f'{EQ_LOCATION}/Logs/'
 TEST_LOG        = log_to_read
 CSV             = eqdata['CSV Output']
-TAKP            = eqdata['TAKP']
 TOP             = int(eqdata['Top List Length'])
 
 try:

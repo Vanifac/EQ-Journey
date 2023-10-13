@@ -61,6 +61,8 @@ class Parser:
             case 'P1999PVP.txt':
                 return "Red"
             case 'pq.proj.txt':
+                return "Quarm"
+            case 'loginse.txt':
                 return "TAKP"
             case _:
                 return "Unknown"
@@ -279,10 +281,18 @@ def look_for_process():
 
 
 def recent_modified_log():
-    if not cfg.TAKP:
+    log = ""
+    try:
         x, log = max((f.stat().st_mtime, str(f)) for f in Path(cfg.LOG_LOCATION).iterdir())
-    else:
-        x, log = max((f.stat().st_mtime, str(f)) for f in Path(cfg.EQ_LOCATION).iterdir() if 'eqlog' in str(f).split("\\")[-1].split("_") and 'pq.proj.txt' in str(f).split("\\")[-1].split("_"))
+    except:
+        try:
+            x, log = max((f.stat().st_mtime, str(f)) for f in Path(cfg.EQ_LOCATION).iterdir()
+                       if 'eqlog' in str(f).split("\\")[-1].split("_")
+                       and ('loginse.txt' in str(f).split("\\")[-1].split("_")
+                            or 'pq.proj.txt' in str(f).split("\\")[-1].split("_")))
+        except Exception:
+            with open('errorlog.txt', 'a', encoding='utf-8') as f:
+                f.write(f'{"Could not find any compatable EQ logs. Verify the install location and that logs are enabled."}\n{Exception}')
     return log
 
 
