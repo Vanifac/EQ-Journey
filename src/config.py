@@ -4,6 +4,7 @@ from tkinter import Tk, filedialog
 
 # CONFIG
 TEST = False
+log_to_read = 'eqlog_Vlex_P1999Green.txt'
 config_object = ConfigParser()
 
 PROCESS_NAME        = "eqgame.exe"
@@ -14,7 +15,7 @@ CONFIG_GAME_DIR_KEY = 'game_directory'
 TIME_BETWEEN_CHECKS = 5 if TEST else 60
 SLEEP_TIMER         = 1 if TEST else 10
 WAIT_DURATION       = 10
-MAX_WAIT_TIME       = 30
+MAX_WAIT_TIME       = 600
 MAX_WAIT_TICKS      = MAX_WAIT_TIME / WAIT_DURATION
 
 # Load saved info
@@ -31,6 +32,7 @@ if eqdata is None:
     root.withdraw()  # Hide small window
     root.attributes('-topmost', True)  # Opened windows will be active. above all windows despite of selection
     eqdata = {CONFIG_GAME_DIR_KEY: filedialog.askdirectory(title="Everquest Directory")}
+    eqdata['TAKP']              = False
     eqdata['CSV Output']        = True
     eqdata['TXT Output']        = False
     eqdata['Top List Length']   = 10
@@ -41,9 +43,15 @@ if eqdata is None:
 
 EQ_LOCATION     = eqdata[CONFIG_GAME_DIR_KEY]
 LOG_LOCATION    = f'{EQ_LOCATION}/Logs/'
-TEST_LOG        = "eqlog_Grazo_P1999Green.txt"
+TEST_LOG        = log_to_read
 CSV             = eqdata['CSV Output']
+TAKP            = eqdata['TAKP']
 TOP             = int(eqdata['Top List Length'])
+
+try:
+    LEVELUPLARRY = eqdata['LEVELUPLARRY']
+except KeyError:
+    LEVELUPLARRY = False
 
 
 # # Auto Enable Logging
