@@ -113,7 +113,7 @@ class Parser:
             self.eq_Char['Line'] = self.file.tell()
             save.write(json.dumps(self.eq_Char, indent=4))
             if not self.fast_Scan:
-                print(f"{'Saved.' :-^41}")
+                print(f"{'Saved.':-^41}")
         self.update_csvs()
         self.last_save = time.time()
 
@@ -191,7 +191,7 @@ class Parser:
             self.session = False
 
     def cmd_session_start(self, cmd):
-        print(f"{'New tracking session started!' :-^41}")
+        print(f"{'New tracking session started!':-^41}")
         self.session        = True
         self.start_time     = time.time()
         self.start_ticks    = self.eq_Char['Stats']['Exp Ticks']
@@ -201,8 +201,8 @@ class Parser:
         self.exp            = self.start_exp
         self.start_plat     = self.eq_Char['Coin']['Earned']['PP']
         with open('Active_Character/SessionStats.txt', 'w') as sesh:
-            sesh.write(f"{'Session Stats' :-^41}\n")
-            sesh.write(f"{'Current: ' :>14}{self.exp:<5}")
+            sesh.write(f"{'Session Stats':-^41}\n")
+            sesh.write(f"{'Current: ':>14}{self.exp:<5}")
 
     def cmd_session_status(self, cmd):
         try:
@@ -221,15 +221,15 @@ class Parser:
             pp_per_tic      = round(pp_gained/ticks, 1)
 
             with open('Active_Character/SessionStats.txt', 'w') as sesh:
-                sesh.write(f"{'Session Stats' :-^41}\n")
-                sesh.write(f"{'Current: ' :>14}{self.exp:<5}|{'Kills: ' :>12}{ticks}\n")
-                sesh.write(f"{'Exp Earned: ':>14}{gained:<5}|{'PP Earned: ' :>12}{pp_gained}\n")
+                sesh.write(f"{'Session Stats':-^41}\n")
+                sesh.write(f"{'Current: ':>14}{self.exp:<5}|{'Kills: ':>12}{ticks}\n")
+                sesh.write(f"{'Exp Earned: ':>14}{gained:<5}|{'PP Earned: ':>12}{pp_gained}\n")
                 sesh.write(f"{'Exp/Kill: ':>14}{self.per_tick:<5}|{'PP/Kill: ':>12}{pp_per_tic}\n")
-                sesh.write(f"{'Exp/Hour: ':>14}{exp_per_hour:<5}|{'PP/Hour: ' :>12}{pp_per_hr}\n")
+                sesh.write(f"{'Exp/Hour: ':>14}{exp_per_hour:<5}|{'PP/Hour: ':>12}{pp_per_hr}\n")
                 sesh.write(f"{'Duration: ':>14}{dur:<5}|{'Ding @: ':>12}{ding_at.strftime('%a %I:%M%p')}")
-            print(f'{"Session Text Updated." :-^41}')
+            print(f'{"Session Text Updated":-^41}')
         except ZeroDivisionError:
-            print(f'{"Not enough data yet." :-^41}')
+            print(f'{"Not enough data yet":-^41}')
         except Exception as e:
             print(e)
 
@@ -303,7 +303,6 @@ def get_active_log(silent):
     x = 0
     log = recent_modified_log()
     while 'dbg.txt' in log or 'sky.txt' in log:
-        print("they're in log!")
         if not silent:
             print(STRI.DBG_LOG)
             silent = True
@@ -440,6 +439,9 @@ def parse():
                     typ, hit = re.findall(r'(critical hit|Crippling Blow|\d+)', line)
                     Par.eq_Char['Stats'][typ.title()] = max(Par.eq_Char['Stats'][typ.title()], int(hit))
 
+                elif re.match(f'^{Par.name} (lands|Scores) a (critical hit|Crippling Blow)!', line):
+                    pass
+                
                 elif re.match(r'eqj-(.+) is not online at this time.', line.lower()):
                     Par.eqj_session_command(line)
 
@@ -451,7 +453,7 @@ def parse():
                     to_save = True
 
             # Save when flagged and if it's been over 5 seconds since last save.
-            if (to_save and (now - Par.last_save) > 10) or (now - Par.last_save) > 60:
+            if (to_save and (now - Par.last_save) > 15) or (now - Par.last_save) > 60:
                 Par.save_it()
                 to_save = False
 
@@ -476,9 +478,9 @@ def parse():
             # Shorter wait if parsing. No wait if fast_Scan.
             elif not Par.fast_Scan:
                 time.sleep(.01)
-    except Exception:
+    except Exception as exc:
         with open('errorlog.txt', 'a', encoding='utf-8') as f:
-            f.write(f'{line}\n{Exception}')
+            f.write(f'{line}\n{exc}\n\n')
 
 
 # Do the Thing
