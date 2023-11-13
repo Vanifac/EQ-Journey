@@ -287,12 +287,13 @@ def recent_modified_log():
     except:
         try:
             x, log = max((f.stat().st_mtime, str(f)) for f in Path(cfg.EQ_LOCATION).iterdir()
-                       if 'eqlog' in str(f).split("\\")[-1].split("_")
-                       and ('loginse.txt' in str(f).split("\\")[-1].split("_")
-                            or 'pq.proj.txt' in str(f).split("\\")[-1].split("_")))
+                         if 'eqlog' in str(f).split("\\")[-1].split("_")
+                         and ('loginse.txt' in str(f).split("\\")[-1].split("_")
+                              or 'pq.proj.txt' in str(f).split("\\")[-1].split("_")))
         except Exception:
             with open('errorlog.txt', 'a', encoding='utf-8') as f:
-                f.write(f'{"Could not find any compatable EQ logs. Verify the install location and that logs are enabled."}\n{Exception}')
+                f.write(
+                    f'{"Could not find any compatable EQ logs. Verify the install location and that logs are enabled."}\n{Exception}')
     return log
 
 
