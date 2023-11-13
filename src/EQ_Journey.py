@@ -53,6 +53,7 @@ class Parser:
 
     # FUNCTIONS
     def get_server(self):
+        print(self.active_Log.split('/')[-1].split('_'))
         match self.active_Log.split('/')[-1].split('_')[2]:
             case 'P1999Green.txt':
                 return "Green"
@@ -441,7 +442,7 @@ def parse():
 
                 elif re.match(f'^{Par.name} (lands|Scores) a (critical hit|Crippling Blow)!', line):
                     pass
-                
+
                 elif re.match(r'eqj-(.+) is not online at this time.', line.lower()):
                     Par.eqj_session_command(line)
 

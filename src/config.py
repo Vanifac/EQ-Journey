@@ -3,8 +3,8 @@ from configparser import ConfigParser
 from tkinter import Tk, filedialog
 
 # CONFIG
-TEST = False
-log_to_read = 'eqlog_Vlex_P1999Green.txt'
+TEST = True
+log_to_read = 'eqlog_Gnomu_pq.proj.txt'
 config_object = ConfigParser()
 
 PROCESS_NAME        = "eqgame.exe"
